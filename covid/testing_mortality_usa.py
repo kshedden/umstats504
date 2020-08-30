@@ -1,8 +1,8 @@
 # ## COVID testing and mortality data for the US states
 
-# This notebook considers several topics related to COVID mortality
-# and SARS-CoV-2 virus testing, using data for the US obtained from
-# the [COVID Tracking project](covidtracking.com).
+# This notebook considers the relationship between COVID mortality and
+# testing results for the SARS-CoV-2 virus, using data for the US
+# obtained from the [COVID Tracking project](covidtracking.com).
 #
 # You can get the data by going to https://covidtracking.com/api, then
 # downloading the CSV file under "historic state data".  Make sure to
@@ -22,22 +22,34 @@
 # assess the prevalence of infections.  As with any surveillance
 # activity, it is not necessary to detect all cases to estimate the
 # prevalence.  It is sufficient to detect a fraction of the cases, and
-# generalize to the full population.  Unfortunately, SARS-CoV-2
-# testing has been performed haphazardly -- a very
-# non-representative subpopulation has been tested.  Therefore, we
-# will not actually be aiming literally for the prevalence here
-# (e.g. cases per thousand population).  Instead, we take the point of
-# view that the question of whether enough testing has been done
-# can partially be settled by assessing to what extent testing results
-# predict mortality, which is the main hard endpoint for COVID.
+# generalize to the full population.
 #
-# Two very important unkowns in this discussion are the "case ascertainment
-# ratio" (CAR) -- the number of actual cases per case that is detected via
-# testing, and the "infection mortality ratio" (IFR) -- the probability of
-# dying if infected.  Using only observed mortality and testing data,
-# these two numbers are not separately identifiable.  Suppose we observe
-# 1000 cases and 10 deaths.  These data are compatible with a CAR of 1 and an IFR
-# of 1/100, and are also compatible with a CAR of 10 and an IFR of 1/1000.
+# Unfortunately, SARS-CoV-2 testing has been performed haphazardly --
+# a very non-representative subpopulation has been tested.  This makes
+# generalization more difficult.  Here we will not be aiming literally
+# to estimate the prevalence (e.g. cases per thousand population).
+# Instead, we assess the extent to which testing results predict
+# mortality, which is the main "hard endpoint" for COVID.  Knowing
+# this will allow us to evaluate the extent to which testing reveals
+# the full state of the epidemic in the United States.
+#
+# The relationship between exposure, testing and mortality is largely
+# governed by Two very important unkowns:
+#
+# * The "case ascertainment ratio" (CAR) -- the number of actual cases
+# per case that is detected via testing.
+#
+# * The "infection mortality ratio" (IFR) -- the probability of dying
+# if infected.
+#
+# Using only observed mortality and testing data, these two numbers
+# are not separately identifiable.  Suppose we observe 1000 cases and
+# 10 deaths.  These data are compatible with a CAR of 1 and an IFR of
+# 1/100, and are also compatible with a CAR of 10 and an IFR of
+# 1/1000.  This issue is one of the main reasons that we aim here to
+# explore the statistical relationship between testing results and
+# mortality, and do not aim to directly estimate the prevalence, CAR,
+# or IFR.
 
 import pandas as pd
 import numpy as np
@@ -108,16 +120,19 @@ for x in "ddeath", "dpositive", "dnegative":
 # reported are primarily PCR tests that assess for viral RNA, which
 # should indicate an active or recently cleared SARS-CoV-2 infection.
 # The number of positive tests and the number of negative tests are
-# reported for each US state and for each day.
+# reported for each US state and for each day.  Above we differenced
+# the cumulative data to obtain per-day values for positive tests,
+# negative tests, and deaths (mortality).
 #
-# Each US state follows different
-# practices for testing and reporting.  For mortality data, there may
-# be differences in which deaths are deemed to be COVID-associated.
-# There are likely to be substantial undercounts, for example some
-# states during some periods of time only reported deaths in
-# hospitals.  But there could be some overcounting as well, e.g. a
-# person with multiple severe illnesses, including COVID, may not have
-# died primarily due to COVID.
+# Each US state follows different practices for performing testing
+# (i.e. who gets tested, what type of test is used), reporting the
+# results of testing, and reporting COVID-related mortality.  For
+# mortality data, there may be differences in which deaths are deemed
+# to be COVID-associated.  There are likely to be substantial
+# undercounts, for example some states during some periods of time
+# only reported deaths in hospitals.  But there could be some
+# overcounting as well, e.g. a person with multiple severe illnesses,
+# including COVID, may not have died primarily due to COVID.
 #
 # For the testing data, each state has its own policies about who can
 # get tested.  Early in the epidemic testing was severely constrained
@@ -125,9 +140,9 @@ for x in "ddeath", "dpositive", "dnegative":
 # reported negative test results, but reporting of test positives is
 # presumably somewhat more consistent.  The sample of tested people is
 # not representative of the general population, and is likely a
-# heterogeneous mix of health-care workers and people with COVID symptoms
-# It is certainly enriched for cases, and it is likely that the CAR is
-# substantially less than 1.
+# heterogeneous mix of health-care workers and people with COVID
+# symptoms It is certainly enriched for cases, and it is likely that
+# the CAR is substantially less than 1.
 
 # Below we plot the daily death counts for several states.
 
@@ -175,11 +190,11 @@ for st in "NY", "MI", "TX":
 #
 # Since people who die from COVID typically were infected several
 # weeks prior to their death, we will create counts of testing
-# positives and negatives in several week-long windows, lagging
-# behind the mortality count.
+# positives and negatives in several week-long windows, lagging behind
+# the mortality count.
 
-# Sum x from d2 days back in time to d1 days back in time, inclusive of
-# both endpoints.  d2 must be greater than d1.
+# Sum x from d2 days back in time to d1 days back in time, inclusive
+# of both endpoints.  d2 must be greater than d1.
 def wsum(x, d1, d2):
     w = np.ones(d2 + 1)
     if d1 > 0:
@@ -202,12 +217,12 @@ for j in range(4):
 # prevalence differs by a factor of two over the past month, we expect
 # there to be a factor of two difference in COVID mortality today.
 #
-# Another reasonable hypothesis would be that the ratio of positive to
-# negative test results, rather than the absolute number of positive
-# test results, could be a stronger predictor of mortality.  This is
-# based on the logic that taking this ratio corrects for the fact that
-# states may increase their testing when a big surge in cases is
-# expected.
+# Another plausible hypothesis (that turns out not to be supported by
+# the data) is that the ratio of positive to negative test results,
+# rather than the absolute number of positive test results, could be a
+# stronger predictor of mortality.  This is based on the logic that
+# taking this ratio corrects for the fact that states may increase
+# their testing when a big surge in cases is expected.
 #
 # There are several other factors that we should consider and account
 # for if possible:
@@ -215,9 +230,9 @@ for j in range(4):
 # * The virus arrived in different states at different times, e.g. it
 # arrived in New York before it arrived in South Dakota.
 #
-# * States vary greatly in terms of population size.  It is possible that
-# death counts scale with population size (although early in an epidemic
-# this may not hold).
+# * States vary greatly in terms of population size.  It is possible
+# that death counts scale with population size (although early in an
+# epidemic this may not hold).
 #
 # * Transmission rates may vary by state, e.g. due to population
 # density.
@@ -228,7 +243,7 @@ for j in range(4):
 # * The infection/fatality ratio (IFR) may vary by state due to
 # demographic characteristics of the population and prevalence of
 # comorbidities.
-
+#
 # To account for differences in the time when the disease arrived in
 # each state, we identify the date of the first COVID death, then
 # include only the data starting 10 days after that date.
@@ -246,8 +261,8 @@ dx = pd.merge(dx, xx, left_on="state", right_index=True)
 dx["rdate"] = (dx.pdate - dx.firstdeath).dt.days
 dx = dx.loc[dx.rdate >= 10, :]
 
-# Get the day of the week (Monday=0, Tuesday=1, etc.) which will be used
-# as a covariate
+# Get the day of the week (Monday=0, Tuesday=1, etc.), which will be
+# used as a covariate
 
 dx["weekday"] = dx.pdate.dt.weekday
 
@@ -259,11 +274,10 @@ dx["lpop"] = np.log(dx["pop"])
 # per state/day as an outcome that is predicted by testing results.
 # We also include state level fixed effects to control for the
 # possibility of different infection/fatality ratios and other forms
-# of heterogeneity among the states.
-# This initial model is fit using a quasi-Poisson generalized linear modeling
-# (GLM) approach.  The model includes fixed effects for the states and for
-# the days of the week, which
-# will be discussed further below.
+# of heterogeneity among the states.  This initial model is fit using
+# a quasi-Poisson generalized linear modeling (GLM) approach.  The
+# model includes fixed effects for the states and for the days of the
+# week.
 
 fml = "ddeath ~ 0 + C(state) + C(weekday) + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
@@ -333,29 +347,16 @@ print(r2.summary())
 # sufficiently informative about the prevalence of the disease at each
 # state/time, then the state fixed effects in the above model might
 # reflect state-to-state differences in the infection/fatality ratio.
-# The analysis below shows that these state effects have a range of
-# around 4.4 on the log scale, with a standard deviation of 0.82.
-# Since exp(0.82) ~ 2.27, this might suggest that most states have IFR
-# values that are within a factor of around 2.5 of the mean
-# state-level IFR.
-#
-# Variation on the order of 2 or more suggests major contributions
-# of state-level factors to COVID mortality.  Note in particular
-# that Michigan, New York, Pennsylvania and other hard-hit states
-# have large fixed effects, suggesting that they either have lower
-# case ascertainment, or higher infection fatality rates.
+# Variation in the estimated state fixed effects suggests major
+# contributions of state-level factors to COVID mortality.
 
 # Extract the state fixed effects
 pa = r1.params
 st = [[x[9:11], y] for x, y in zip(pa.index, pa.values) if "state" in x]
 st = pd.DataFrame(st, columns=["state", "coef"])
 st = st.sort_values(by="coef")
-
-print("Range of state effects:")
-print(st.coef.min(), st.coef.max(), "\n")
-
-print("Unadjusted SD of state effects:")
-print(st.coef.std(), "\n")
+print("\nState fixed effects:\n")
+print(st, "\n\n")
 
 # The state fixed effects discussed above are estimates, not exact
 # values.  We can get a sense for how precise the estimates are
@@ -400,7 +401,7 @@ fml += " + ".join(["logcumneg%d" % j for j in range(4)])
 m3 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
 r3 = m3.fit(scale="X2")
 print(r3.summary())
-print("Model 1 AIC: %f" % r1.aic)
+print("\nModel 1 AIC: %f" % r1.aic)
 print("Model 3 AIC: %f" % r3.aic)
 
 # Since population size is a state-level variable and we already have
@@ -418,8 +419,7 @@ fml += " + "
 fml += " + ".join(["lpop_cen*logcumneg%d" % j for j in range(4)])
 m4 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
 r4 = m4.fit(scale="X2")
-print("AIC for model 1: %f" % r1.aic)
-print("AIC for model 4: %f" % r4.aic)
+print("Model 4 AIC: %f" % r4.aic)
 
 # ## Dispersion and the scale parameter
 
@@ -503,6 +503,11 @@ for (m, r) in (m1, r1), (m2, r2), (m3, r3), (m4, r4):
     s = huber_scale(r.resid_pearson, m1.exog.shape[1])
     scale_huber.append(s)
 
+print("\nRobust scale parameter estimates:")
+for s in scale_huber:
+    print("%f" % s)
+print("")
+
 # In a perfect Poisson situation, the variance would be equal to the
 # mean.  This perfect Poisson behavior would arise if we had
 # independence and homogeneity -- independence meaning that any two
@@ -582,7 +587,7 @@ def scale_2group(high_risk, pr_high):
 # that we are obtaining can be explained by the heterogeneity driven by well-established
 # risk factors such as age and sex.
 
-print("\nScale parameter due to 4-fold greater risk in half of the population:")
+print("Scale parameter due to 4-fold greater risk in half of the population:")
 print(scale_2group(4.0, 0.5), "\n")
 
 # Calculate the scale parameter by state
