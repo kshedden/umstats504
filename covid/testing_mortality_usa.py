@@ -170,11 +170,12 @@ for st in "NY", "MI", "TX":
 
         # Plot a nice graph and save it as a pdf
         plt.clf()
+        plt.axes([0.15, 0.12, 0.8, 0.8])
         plt.grid(True)
         plt.plot(da.pdate.values, da[vn].values, '-', color='purple')
         plt.title(st)
         plt.xlabel("Day")
-        plt.ylabel("Deaths")
+        plt.ylabel(ti)
         plt.gca().xaxis.set_major_formatter(fmt)
         plt.gca().xaxis.set_major_locator(months)
         pdf.savefig()
@@ -608,3 +609,5 @@ state_scale = state_scale.sort_values(by="robust_scale")
 td = dx.groupby("state").aggregate({"ddeath": np.sum})
 state_scale = pd.merge(state_scale, td, left_on="state", right_index=True)
 state_scale = state_scale.rename(columns={"ddeath": "total_deaths"})
+
+pdf.close()
