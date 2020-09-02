@@ -585,7 +585,7 @@ def scale_2group(high_risk, pr_high):
 # population in which 50% of the population (i.e. males) is 4 times more likely to
 # die than the other people (females), we get a scale parameter that is
 # similar to the observed scale parameter.  This suggests that the scale parameters
-# that we are obtaining can be explained by the heterogeneity driven by well-established
+# that we are obtaining can be explained by the heterogeneity driven by established
 # risk factors such as age and sex.
 
 print("Scale parameter due to 4-fold greater risk in half of the population:")
@@ -609,5 +609,19 @@ state_scale = state_scale.sort_values(by="robust_scale")
 td = dx.groupby("state").aggregate({"ddeath": np.sum})
 state_scale = pd.merge(state_scale, td, left_on="state", right_index=True)
 state_scale = state_scale.rename(columns={"ddeath": "total_deaths"})
+
+## Assess the mean/variance relationship
+
+dr = pd.DataFrame({"fit": r1.fittedvalues, "resid": r1.resid_pearson})
+dr["fitg"] = pd.qcut(dr["fit"], 20)
+p = r1.model.exog.shape[1]
+ds = dr.groupby("fitg").aggregate({"fitg": "first", "fit": np.mean,
+                                   "resid": [np.var, lambda x: huber_scale(x, p/20)]})
+
+# Refit the GLMs with heteroscedasticity robust standard errors
+
+r1x = m1.fit(cov_type="HC0")
+r3x = m3.fit(cov_type="HC0")
+r4x = m4.fit(cov_type="HC0")
 
 pdf.close()
