@@ -610,15 +610,27 @@ td = dx.groupby("state").aggregate({"ddeath": np.sum})
 state_scale = pd.merge(state_scale, td, left_on="state", right_index=True)
 state_scale = state_scale.rename(columns={"ddeath": "total_deaths"})
 
-## Assess the mean/variance relationship
+## Assess the mean/variance relationship, attempt to find a relationship
+## of the form Var(Y|X) = E[Y|X]^p
 
 dr = pd.DataFrame({"fit": r1.fittedvalues, "resid": r1.resid_pearson})
+dr["resid"] /= r1.fittedvalues**0.27  # Adjust this exponent to get a constant trend
 dr["fitg"] = pd.qcut(dr["fit"], 20)
 p = r1.model.exog.shape[1]
 ds = dr.groupby("fitg").aggregate({"fitg": "first", "fit": np.mean,
                                    "resid": [np.var, lambda x: huber_scale(x, p/20)]})
 
-# Refit the GLMs with heteroscedasticity robust standard errors
+# Fit the model with the variance structure found above
+mp = sm.families.Poisson()
+mp.variance = sm.families.varfuncs.Power(1.5)
+fml = "ddeath ~ 0 + C(state) + C(weekday) + "
+fml += " + ".join(["logcumpos%d" % j for j in range(4)])
+fml += " + "
+fml += " + ".join(["logcumneg%d" % j for j in range(4)])
+m1z = sm.GLM.from_formula(fml, data=dx, family=mp)
+r1z = m1z.fit(scale="X2")
+
+# Refit the GLMs with heteroscedasticity-robust standard errors
 
 r1x = m1.fit(cov_type="HC0")
 r3x = m3.fit(cov_type="HC0")
