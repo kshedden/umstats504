@@ -1,8 +1,9 @@
 # ## COVID testing and mortality data for the US states
 
 # This notebook considers the relationship between COVID mortality and
-# testing results for the SARS-CoV-2 virus, using data for the US
-# obtained from the [COVID Tracking project](covidtracking.com).
+# testing results for SARS-CoV-2 coronavirus exposure/infection, using
+# data for the US obtained from the [COVID Tracking
+# project](covidtracking.com).
 #
 # You can get the data by going to https://covidtracking.com/api, then
 # downloading the CSV file under "historic state data".  Make sure to
@@ -16,40 +17,33 @@
 # from Wikipedia below.
 #
 # Our main interest here will be to assess whether the reported
-# testing data for active viral infections, using the PCR testing
-# platform, are sufficient to explain the variation in COVID-related
-# mortality.  One of the main reasons to perform viral testing is to
-# assess the prevalence of infections.  As with any surveillance
-# activity, it is not necessary to detect all cases to estimate the
-# prevalence.  It is sufficient to detect a fraction of the cases, and
-# generalize to the full population.
+# testing data for active viral infections are sufficient to explain
+# the variation in COVID-related mortality.  People who die of COVID
+# may do so 1-4 weeks after being infected (in most cases).
+# Therefore, it is reasonable to anticipate that deaths will follow
+# infections, with a time lag of this order.
 #
-# Unfortunately, SARS-CoV-2 testing has been performed haphazardly --
-# a very non-representative subpopulation has been tested.  This makes
-# generalization more difficult.  Here we will not be aiming literally
-# to estimate the prevalence (e.g. cases per thousand population).
-# Instead, we assess the extent to which testing results predict
-# mortality, which is the main "hard endpoint" for COVID.  Knowing
-# this will allow us to evaluate the extent to which testing reveals
-# the full state of the epidemic in the United States.
+# Testing in the US has been done quite haphazardly.  If we were
+# testing a representative subset of the US population every day using
+# an accurate test, it would be reasonable to anticipate a nearly 1-1
+# relationship between positive test counts and mortality counts, at a
+# lag as stated above.  In reality, testing varies over time and
+# between states.  The people getting tested are not at all
+# representative of the total population, or even of the high-risk
+# population.
 #
-# The relationship between exposure, testing and mortality is largely
-# governed by Two very important unkowns:
+# An additional factor is that not everyone who becomes infected with
+# the coronavirus has the same chance of dying.  For example.  older
+# people, males, and people in poor health are more likely to die.
+# However we do not have data on either testing or mortality
+# stratified by these factors.  This deficiency is expected to weaken
+# the relationship between test results and mortality in our data.
 #
-# * The "case ascertainment ratio" (CAR) -- the number of actual cases
-# per case that is detected via testing.
-#
-# * The "infection mortality ratio" (IFR) -- the probability of dying
-# if infected.
-#
-# Using only observed mortality and testing data, these two numbers
-# are not separately identifiable.  Suppose we observe 1000 cases and
-# 10 deaths.  These data are compatible with a CAR of 1 and an IFR of
-# 1/100, and are also compatible with a CAR of 10 and an IFR of
-# 1/1000.  This issue is one of the main reasons that we aim here to
-# explore the statistical relationship between testing results and
-# mortality, and do not aim to directly estimate the prevalence, CAR,
-# or IFR.
+# The analysis below focuses on using Poisson and related forms of GLM
+# regression to understand the relationship between coronavirus test
+# results and COVID mortality.  The analysis illustrates a number of
+# aspects of generalized linear modeling that are important in many
+# other settings.
 
 import pandas as pd
 import numpy as np
@@ -57,14 +51,23 @@ import statsmodels.api as sm
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-import termplotlib as tpl
 import os
 
+# Set this to False if you don't have gnuplot on your machine.  You
+# can get gnuplot from www.gnuplot.info.
+
+use_termplot = True
+
+if use_termplot:
+    import termplotlib as tpl
+
 # Plot graphs here.
+
 pdf = PdfPages("testing_mortality_usa.pdf")
 
 # Below we get state population data from Wikipedia.  We only download
 # the file one time and store it locally as 'states.csv'.
+
 if not os.path.exists("states.csv"):
 
     # Map full state names to postal codes
@@ -123,28 +126,9 @@ for x in "ddeath", "dpositive", "dnegative":
 # reported for each US state and for each day.  Above we differenced
 # the cumulative data to obtain per-day values for positive tests,
 # negative tests, and deaths (mortality).
-#
-# Each US state follows different practices for performing testing
-# (i.e. who gets tested, what type of test is used), reporting the
-# results of testing, and reporting COVID-related mortality.  For
-# mortality data, there may be differences in which deaths are deemed
-# to be COVID-associated.  There are likely to be substantial
-# undercounts, for example some states during some periods of time
-# only reported deaths in hospitals.  But there could be some
-# overcounting as well, e.g. a person with multiple severe illnesses,
-# including COVID, may not have died primarily due to COVID.
-#
-# For the testing data, each state has its own policies about who can
-# get tested.  Early in the epidemic testing was severely constrained
-# by the availability of test kits.  Not all states have consistently
-# reported negative test results, but reporting of test positives is
-# presumably somewhat more consistent.  The sample of tested people is
-# not representative of the general population, and is likely a
-# heterogeneous mix of health-care workers and people with COVID
-# symptoms It is certainly enriched for cases, and it is likely that
-# the CAR is substantially less than 1.
 
-# Below we plot the daily death counts for several states.
+# Below we plot the daily death counts, and the daily counts of
+# positive and negative tests for several states.
 
 fmt = mdates.DateFormatter("%m-%d")
 months = mdates.MonthLocator()
@@ -161,12 +145,13 @@ for st in "NY", "MI", "TX":
         da = dx.loc[dx.state==st, :]
 
         # Plot a crude graph in the terminal
-        fig = tpl.figure()
-        x = (da.pdate - pd.to_datetime("2020-01-01")).dt.days
-        fig.plot(x, da[vn].values, xlabel="Days since Jan 1, 2020",
-                 title="%s/day in %s" % (ti, st))
-        fig.show()
-        print("")
+        if use_termplot:
+            fig = tpl.figure()
+            x = (da.pdate - pd.to_datetime("2020-01-01")).dt.days
+            fig.plot(x, da[vn].values, xlabel="Days since Jan 1, 2020",
+                     title="%s/day in %s" % (ti, st))
+            fig.show()
+            print("")
 
         # Plot a nice graph and save it as a pdf
         plt.clf()
@@ -180,22 +165,9 @@ for st in "NY", "MI", "TX":
         plt.gca().xaxis.set_major_locator(months)
         pdf.savefig()
 
-# Our main analysis will use a regression approach to relate
-# SARS-CoV-2 testing results to COVID mortality.  As noted above, the
-# motivation for this analysis is that the people who test positive
-# can be viewed in some way as representing the prevalence of active
-# infections (with many caveats, to be discussed below).  Thus,
-# understanding the statistical relationship between testing results
-# and COVID mortality can be informative about the relationship
-# between exposure and mortality.
-#
-# Since people who die from COVID typically were infected several
-# weeks prior to their death, we will create counts of testing
-# positives and negatives in several week-long windows, lagging behind
-# the mortality count.
-
 # Sum x from d2 days back in time to d1 days back in time, inclusive
 # of both endpoints.  d2 must be greater than d1.
+
 def wsum(x, d1, d2):
     w = np.ones(d2 + 1)
     if d1 > 0:
@@ -244,7 +216,7 @@ for j in range(4):
 # * The infection/fatality ratio (IFR) may vary by state due to
 # demographic characteristics of the population and prevalence of
 # comorbidities.
-#
+
 # To account for differences in the time when the disease arrived in
 # each state, we identify the date of the first COVID death, then
 # include only the data starting 10 days after that date.
@@ -259,11 +231,15 @@ xx = dx.groupby("state").apply(firstdeath)
 xx.name = "firstdeath"
 dx = pd.merge(dx, xx, left_on="state", right_index=True)
 
+# Create a "relative date" variable, counting the days from the first
+# COVID death in a state.
+
 dx["rdate"] = (dx.pdate - dx.firstdeath).dt.days
 dx = dx.loc[dx.rdate >= 10, :]
 
 # Get the day of the week (Monday=0, Tuesday=1, etc.), which will be
-# used as a covariate
+# used as a covariate.  For administrative reasons, there are big
+# differences in the reporting of deaths and test results by day.
 
 dx["weekday"] = dx.pdate.dt.weekday
 
@@ -272,13 +248,13 @@ dx["weekday"] = dx.pdate.dt.weekday
 dx["lpop"] = np.log(dx["pop"])
 
 # Below is an initial regression analysis looking at mortality counts
-# per state/day as an outcome that is predicted by testing results.
-# We also include state level fixed effects to control for the
-# possibility of different infection/fatality ratios and other forms
-# of heterogeneity among the states.  This initial model is fit using
-# a quasi-Poisson generalized linear modeling (GLM) approach.  The
-# model includes fixed effects for the states and for the days of the
-# week.
+# per state/day as an outcome, predicted by positive and negative
+# testing results at multiple lags.  We also include state level fixed
+# effects to control for the possibility of different ascertainment,
+# different infection/fatality ratios, and other forms of
+# heterogeneity among the states.  This initial model is fit using a
+# quasi-Poisson generalized linear modeling (GLM) approach.  The model
+# includes fixed effects for the states and for the days of the week.
 
 fml = "ddeath ~ 0 + C(state) + C(weekday) + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
@@ -292,36 +268,28 @@ print(r1.summary())
 # manifest as a perfect linear relationship between the log number of
 # cases and the log number of positive tests.  However people who die
 # of COVID expire at varying times relative to the date of their
-# positive test. A very simple way to look at the scaling is that
-# if all four lagging windows of positive tests increased by a
-# given factor, then the number of deaths today would be expected
-# to increase by this same factor.  This would imply that the
+# positive test. A very simple way to look at the scaling is that if
+# all four lagging windows of positive tests increased by a given
+# factor, then the number of deaths today would be expected to
+# increase by this same factor.  This would imply that the
 # coefficients for the positive test variables should sum to 1.
 #
-# The coefficients for the number of negative tests are informative
-# in that they tell us whether we should consider the total amount
-# of testing, or only the number of positive tests.  It is anticipated
+# The coefficients for the number of negative tests are informative in
+# that they tell us whether we should consider the total amount of
+# testing, or only the number of positive tests.  It is anticipated
 # that the coefficients for negative tests would be negative, and if
-# they are the additive inverses of the corresponding coefficients
-# for positive tests, this would support using the proportion of
-# positive tests, rather than the absolute number of positive tests,
-#  as a predictor of population exposure.
-#
-# As noted above, only a fraction of the people who have been exposed
-# to SARS-CoV-2 virus are tested during the period of time when they
-# would have a positive PCR test.  There is an unknown scaling factor
-# called the "ascertainment ratio" between the number of exposed
-# people and the number of people who are tested and found to have an
-# active infection.  The results here do not tell us anything about
-# this ratio.
-#
+# they are the additive inverses of the corresponding coefficients for
+# positive tests, this would support using the proportion of positive
+# tests, rather than the absolute number of positive tests, as a
+# predictor of population exposure.
+
 # An alternative approach to accommodating differences among the
 # states is to use generalized estimating equations (GEE), clustering
 # the data by states.  This accounts for correlations between the
-# observations within a state without adding a large number of
-# fixed effects parameters to the model.  We include here the
-# log of each state's population to account for the state-to-state
-# differences that are related to population size.
+# observations within a state without adding a large number of fixed
+# effects parameters to the model.  We include here the log of each
+# state's population to account for the state-to-state differences
+# that are related to population size.
 
 fml = "ddeath ~ C(weekday) + lpop + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
@@ -331,52 +299,43 @@ m2 = sm.GEE.from_formula(fml, data=dx, groups="state", family=sm.families.Poisso
 r2 = m2.fit(scale="X2")
 print(r2.summary())
 
-# ## State effects and variation in the IFR
+# ## State effects
 
-# The analysis above uses state-level fixed effects to account
-# for state-to-state differences from various sources.  From a
-# statistical perspective, this is one of several ways to address
-# this issue.  Including large numbers of fixed effects in any
-# regression model can raise concerns about there being sufficient
-# data to estimate these parameters.  This is classically known
-# as the "Neyman-Scott" problem.  Alternatives to fixed effects
-# include mutilevel analysis, shrunken fixed effects, and marginal
-# analysis that allow for covariances within states (which we have
-# done here via GEE).
-
-# If we believe that the positive and negative testing data are
-# sufficiently informative about the prevalence of the disease at each
-# state/time, then the state fixed effects in the above model might
-# reflect state-to-state differences in the infection/fatality ratio.
-# Variation in the estimated state fixed effects suggests major
-# contributions of state-level factors to COVID mortality.
+# The analysis above uses state-level fixed effects to account for
+# state-to-state differences from various sources.  From a statistical
+# perspective, this is one of several ways to address this issue.
+# Including large numbers of fixed effects in any regression model can
+# raise concerns about there being sufficient data to estimate these
+# parameters.  This is classically known as the "Neyman-Scott"
+# problem.  Alternatives to fixed effects include mutilevel analysis,
+# shrunken fixed effects, and marginal analysis that allow for
+# covariances within states (which we have done here via GEE).
 
 # Extract the state fixed effects
 pa = r1.params
-st = [[x[9:11], y] for x, y in zip(pa.index, pa.values) if "state" in x]
-st = pd.DataFrame(st, columns=["state", "coef"])
-st = st.sort_values(by="coef")
+stfe = [[x[9:11], y] for x, y in zip(pa.index, pa.values) if "state" in x]
+stfe = pd.DataFrame(stfe, columns=["state", "coef"])
+stfe = stfe.sort_values(by="coef")
 print("\nState fixed effects:\n")
-print(st, "\n\n")
+print(stfe, "\n\n")
 
 # The state fixed effects discussed above are estimates, not exact
-# values.  We can get a sense for how precise the estimates are
-# by considering the standard errors. Note that these standard
-# errors may be too small, as there is likely to be serial correlation
-# in the counts that is not accounted for.  However taken at
-# face-value, the standard errors suggest that the state fixed effects
-# are estimated with reasonable accuracy.
+# values.  We can get a sense for how precise the estimates are by
+# considering the standard errors. Note that these standard errors may
+# be too small, as there is likely to be serial correlation in the
+# counts that is not accounted for.  However taken at face-value, the
+# standard errors suggest that the state fixed effects are estimated
+# with reasonable accuracy.
 
 ii = [i for i, x in enumerate(pa.index) if "state" in x]
 c = r1.cov_params().iloc[ii, ii]
-st["se"] = np.diag(c)
+stfe["se"] = np.diag(c)
 
-# Trimming off the tails, the state fixed effect
-# coefficients range from roughly -1.5 to +1.5, a range of
-# around 3.  Since exp(3) ~ 20, this suggests that there
-# are pairs of states that would have around 20-fold different
-# mortality even under the same amount of positive and negative
-# test results.
+# Trimming off the tails, the state fixed effect coefficients range
+# from roughly -1.5 to +1.5, a range of around 3.  Since exp(3) ~ 20,
+# this suggests that there are pairs of states that would have around
+# 20-fold different mortality even under the same amount of positive
+# and negative test results.
 
 # ## Alternative models and additional sources of confounding
 
@@ -390,10 +349,10 @@ st["se"] = np.diag(c)
 # models in which calendar date, or date relative to the state's first
 # COVID death are included as controls.  We find that the coefficients
 # for the positive and negative testing results are relatively
-# invariant to inclusion of these terms.  Also, based on an AIC comparison
-# between models 1 and 3, the inclusion of rdate (the number of days within
-# a state since that state's first recorded COVID death) does not improve
-# the model fit.
+# invariant to inclusion of these terms.  Also, based on an AIC
+# comparison between models 1 and 3, the inclusion of rdate (the
+# number of days within a state since that state's first recorded
+# COVID death) does not improve the model fit.
 
 fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
@@ -410,8 +369,8 @@ print("Model 3 AIC: %f" % r3.aic)
 # population size has already been accounted for in the models above.
 # However we can take the question of population scaling a bit further
 # by considering interactions between population size and the positive
-# test counts.  As shown below however, these coefficients do not improve
-# model fit based on the AIC.
+# test counts.  As shown below however, these coefficients do not
+# improve model fit based on the AIC.
 
 dx["lpop_cen"] = dx.lpop - dx.lpop.mean()
 fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
@@ -445,7 +404,6 @@ print(r4.scale, "\n")
 # analogous to the sample variance, using the "Pearson residuals".
 
 resid = r2.resid_pearson
-print(np.var(resid))
 
 # This is how the Pearson residuals are constructed:
 f = np.exp(np.dot(m2.exog, r2.params))
@@ -465,7 +423,7 @@ assert(np.abs(np.sum(resid**2) / (len(resid) - m2.exog.shape[1]) - r2.scale) < 1
 # do this is using "Huber's proposal 2" estimate of the scale.  This
 # estimator solves a modified ("clipped") version of the moment-based
 # estimating equation solved by the usual Pearson estimate of the
-# scale parameter..
+# scale parameter.
 
 def g(s, resid):
     c = 1.345
@@ -515,12 +473,11 @@ print("")
 # people living in the same state on the same day die of COVID
 # independently of each other, and homogeneity meaning that any two
 # people living in the same state on the same day have the same
-# probability of dying of COVID.  The independence condition is likely
-# to hold, but the homogeneity condition is not.  Our data are not
-# stratified by known risk factors, sex and age being most
-# well-established.  Pooling
-# data with different event probabilities will give us a scale
-# parameter greater than 1, as is seen here.
+# probability of dying of COVID.  Neither condition is likely to hold,
+# but the homogeneity condition is particularly problematic.  Our data
+# are not stratified by known risk factors, sex and age being most
+# well-established.  Pooling data with different event probabilities
+# will give us a scale parameter greater than 1, as is seen here.
 #
 # Although we don't have access to the stratified data that we would
 # need to characterize these sources of dispersion, we can do some
@@ -546,13 +503,12 @@ print("")
 
 def scale_2group(high_risk, pr_high):
 
-    # Setting f=high_risk, fraction pr_high of the cases will have mean
-    # equal to f*s*ex, where ex is the mean of the observed
-    # data.  Fraction 1 - pr_high of the cases will
-    # have mean equal to s*ex.  Thus, the ratio of the mean
-    # in the first group to the mean in the second group
-    # is f=high_risk.  To match the marginal mean of the data,
-    # we need to solve p*f*s + (1-p)*s = 1.
+    # Setting f=high_risk, fraction pr_high of the cases will have
+    # mean equal to f*s*ex, where ex is the mean of the observed data.
+    # Fraction 1 - pr_high of the cases will have mean equal to s*ex.
+    # Thus, the ratio of the mean in the first group to the mean in
+    # the second group is f=high_risk.  To match the marginal mean of
+    # the data, we need to solve p*f*s + (1-p)*s = 1.
 
     # The first group has mean f[0]*ex, the second group has mean
     # f[1]*ex.
@@ -576,22 +532,26 @@ def scale_2group(high_risk, pr_high):
     vcm = sum([p*(b-ex)**2 for (p, b) in zip(pr, exq)])
     tv = mcv + vcm
 
-    # Return the scale parameter that would be seen if working
-    # with pooled data from these two subpopulations.
+    # Return the scale parameter that would be seen if working with
+    # pooled data from these two subpopulations.
 
     return (tv / ex).mean()
 
-# We can now calculate the hypothetical scale parameter for an imaginary
-# population in which 50% of the population (i.e. males) is 4 times more likely to
-# die than the other people (females), we get a scale parameter that is
-# similar to the observed scale parameter.  This suggests that the scale parameters
-# that we are obtaining can be explained by the heterogeneity driven by established
-# risk factors such as age and sex.
+# We can now calculate the hypothetical scale parameter for an
+# imaginary population in which 50% of the population (i.e. males) is
+# 4 times more likely to die than the other people (females), we get a
+# scale parameter that is similar to the observed scale parameter.
+# This suggests that the scale parameters that we are obtaining can be
+# explained by the heterogeneity driven by established risk factors
+# such as age and sex.
 
 print("Scale parameter due to 4-fold greater risk in half of the population:")
 print(scale_2group(4.0, 0.5), "\n")
 
-# Calculate the scale parameter by state
+# Calculate the scale parameter by state.  Our goal here is to
+# understand the variance structure of the data.  If the scale
+# parameters differ strongly by state, we haven't adequately captured
+# the variance structure.
 
 ds = pd.DataFrame({"state": m1.data.frame.state, "exp": r1.fittedvalues,
                    "obs": m1.data.frame.ddeath})
@@ -610,8 +570,8 @@ td = dx.groupby("state").aggregate({"ddeath": np.sum})
 state_scale = pd.merge(state_scale, td, left_on="state", right_index=True)
 state_scale = state_scale.rename(columns={"ddeath": "total_deaths"})
 
-## Assess the mean/variance relationship, attempt to find a relationship
-## of the form Var(Y|X) = E[Y|X]^p
+## Assess the mean/variance relationship, attempt to find a
+## relationship of the form Var(Y|X) = E[Y|X]^p
 
 dr = pd.DataFrame({"fit": r1.fittedvalues, "resid": r1.resid_pearson})
 dr["resid"] /= r1.fittedvalues**0.27  # Adjust this exponent to get a constant trend
@@ -619,8 +579,19 @@ dr["fitg"] = pd.qcut(dr["fit"], 20)
 p = r1.model.exog.shape[1]
 ds = dr.groupby("fitg").aggregate({"fitg": "first", "fit": np.mean,
                                    "resid": [np.var, lambda x: huber_scale(x, p/20)]})
+ds.columns = [" ".join(x) for x in ds.columns]
+ds = ds.rename(columns={"fitg first": "fit_range", "fit mean": "fit_mean",
+                        "resid var": "scale", "resid <lambda_0>": "robust_scale"})
 
-# Fit the model with the variance structure found above
+if use_termplot:
+    fig = tpl.figure()
+    fig.plot(ds.fit_mean, ds.robust_scale, xlabel="Conditional mean",
+             title="Scale parameter")
+    fig.show()
+
+# Fit the model with the variance structure suggested by the above
+# analysis
+
 mp = sm.families.Poisson()
 mp.variance = sm.families.varfuncs.Power(1.5)
 fml = "ddeath ~ 0 + C(state) + C(weekday) + "
@@ -629,6 +600,25 @@ fml += " + "
 fml += " + ".join(["logcumneg%d" % j for j in range(4)])
 m1z = sm.GLM.from_formula(fml, data=dx, family=mp)
 r1z = m1z.fit(scale="X2")
+
+# This is an equivalent model to what we have above, showing that the
+# family parameter doesn't matter as long as the link and variance
+# structures agree (at least for parameter estimation and standard
+# errors).
+
+m1t = sm.GLM.from_formula(fml, data=dx, family=sm.families.Tweedie(var_power=1.5))
+r1t = m1t.fit(scale="X2")
+assert(np.allclose(r1z.params, r1t.params))
+assert(np.allclose(r1z.bse, r1t.bse)) # standard errors
+
+# This is a sanity-check, to make sure that the results do change if we
+# use different variance models.
+
+m1x = sm.GLM.from_formula(fml, data=dx, family=sm.families.Tweedie(var_power=1.8))
+r1x = m1x.fit(scale="X2")
+
+assert(not np.allclose(r1x.params, r1t.params))
+assert(not np.allclose(r1x.bse, r1t.bse)) # standard errors
 
 # Refit the GLMs with heteroscedasticity-robust standard errors
 
