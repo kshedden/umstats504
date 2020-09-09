@@ -27,8 +27,8 @@
 # testing a representative subset of the US population every day using
 # an accurate test, it would be reasonable to anticipate a nearly 1-1
 # relationship between positive test counts and mortality counts, at a
-# lag as stated above.  In reality, testing varies over time and
-# between states.  The people getting tested are not at all
+# lag as stated above.  In reality, testing intensity varies over time
+# and between states.  The people getting tested are not at all
 # representative of the total population, or even of the high-risk
 # population.
 #
@@ -37,10 +37,11 @@
 # people, males, and people in poor health are more likely to die.
 # However we do not have data on either testing or mortality
 # stratified by these factors.  This deficiency is expected to weaken
-# the relationship between test results and mortality in our data.
+# the statistical relationship between test results and mortality in our
+# data.
 #
 # The analysis below focuses on using Poisson and related forms of GLM
-# regression to understand the relationship between coronavirus test
+# regression to understand the relationship between coronavirus testing
 # results and COVID mortality.  The analysis illustrates a number of
 # aspects of generalized linear modeling that are important in many
 # other settings.
@@ -113,7 +114,10 @@ dx = dx.dropna()
 
 # A few values are negative when differenced, replace them with zero.
 for x in "ddeath", "dpositive", "dnegative":
+    print("Dropping %d cases where %s is negative" %
+          ((dx[x] < 0).sum(), x))
     dx[x] = dx[x].clip(0, np.inf)
+print("")
 
 # ## Relationship between testing results and mortality
 #
@@ -157,7 +161,7 @@ for st in "NY", "MI", "TX":
         plt.clf()
         plt.axes([0.15, 0.12, 0.8, 0.8])
         plt.grid(True)
-        plt.plot(da.pdate.values, da[vn].values, '-', color='purple')
+        plt.plot(da.pdate.values.copy(), da[vn].values.copy(), '-', color='purple')
         plt.title(st)
         plt.xlabel("Day")
         plt.ylabel(ti)
@@ -349,10 +353,7 @@ stfe["se"] = np.diag(c)
 # models in which calendar date, or date relative to the state's first
 # COVID death are included as controls.  We find that the coefficients
 # for the positive and negative testing results are relatively
-# invariant to inclusion of these terms.  Also, based on an AIC
-# comparison between models 1 and 3, the inclusion of rdate (the
-# number of days within a state since that state's first recorded
-# COVID death) does not improve the model fit.
+# invariant to inclusion of these terms.
 
 fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
@@ -361,25 +362,123 @@ fml += " + ".join(["logcumneg%d" % j for j in range(4)])
 m3 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
 r3 = m3.fit(scale="X2")
 print(r3.summary())
-print("\nModel 1 AIC: %f" % r1.aic)
-print("Model 3 AIC: %f" % r3.aic)
 
+# Above we considered the relationship between infections and mortality
+# to be static, i.e. the same relationship exists in all states at all
+# times.  To explore the posibility that this relationship is dynamic,
+# meaning that it is different in different places or at different
+# times, we can include interactions in the model.
+
+# Here we consider whether the relationship between infections and
+# mortality differs between states with larger and smaller populations.
 # Since population size is a state-level variable and we already have
 # included state fixed effects in the model, a main effect of
 # population size has already been accounted for in the models above.
 # However we can take the question of population scaling a bit further
 # by considering interactions between population size and the positive
-# test counts.  As shown below however, these coefficients do not
-# improve model fit based on the AIC.
+# and negative test counts.
 
 dx["lpop_cen"] = dx.lpop - dx.lpop.mean()
 fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
-fml += " + ".join(["lpop_cen*logcumpos%d" % j for j in range(4)])
+fml += " + ".join(["lpop_cen:logcumpos%d + logcumpos%d" % (j, j) for j in range(4)])
 fml += " + "
-fml += " + ".join(["lpop_cen*logcumneg%d" % j for j in range(4)])
+fml += " + ".join(["lpop_cen:logcumneg%d + logcumneg%d" % (j, j) for j in range(4)])
 m4 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
 r4 = m4.fit(scale="X2")
-print("Model 4 AIC: %f" % r4.aic)
+
+# It is also quite plausible that the relationship between infections
+# and mortality has changed over the course of the pandemic.  We can
+# consider this possibility by including interactions between the
+# testing results and time (rdate).  We first do this by adding a
+# "linear by linear" interactions between each positive testing
+# variable and the number of days since the first death in a state
+# (rdate).
+
+fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
+fml += " + ".join(["logcumpos%d:rdate + logcumpos%d" % (j, j) for j in range(4)])
+fml += " + "
+fml += " + ".join(["logcumneg%d" % j for j in range(4)])
+m5 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
+r5 = m5.fit(scale="X2")
+
+# Below is a plot of the "effective slope" relating mortality to
+# logcumpos1 -- logcumpos3.
+
+x = np.linspace(0, 180, 100)
+for j in range(4):
+    a = r5.params["logcumpos%d" % j]
+    b = r5.params["logcumpos%d:rdate" % j]
+    y = a + b*x
+
+    if use_termplot:
+        fig = tpl.figure()
+        fig.plot(x, y, xlabel="Days from first death",
+                 title="Coefficient for log week %d tests" % j)
+        fig.show()
+        print("")
+
+    plt.clf()
+    plt.grid(True)
+    plt.plot(x.copy(), y.copy(), '-')
+    plt.xlabel("Days from first death")
+    plt.ylabel("Coefficient for log week %d tests" % j)
+    pdf.savefig()
+
+# Now we take this one step further, allowing the effective slope
+# of mortality on infections to vary nonlinearly with time.
+
+fml = "ddeath ~ 0 + C(state) + C(weekday) + bs(rdate, 5) + "
+fml += " + ".join(["logcumpos%d*bs(rdate, 5)" % j for j in range(4)])
+fml += " + "
+fml += " + ".join(["logcumneg%d" % j for j in range(4)])
+m6 = sm.GLM.from_formula(fml, data=dx, family=sm.families.Poisson())
+r6 = m6.fit(scale="X2")
+
+# Here is another plot of the "effective slopes" relating mortality to
+# logcumpos1 -- logcumpos3, now using the model with nonlinear interactions.
+# The key insight here is based on how positive tests at different lags
+# predict deaths on a given day, and how these relationships change over
+# time.
+
+dxx = dx.iloc[0:200, :].copy()
+x = np.linspace(10, 180, 100)
+dxx["rdate"] = np.concatenate((x, x))
+dxx["state"] = "MI"
+dxx["weekday"] = 1
+dxx[["logcumpos%d" % j for j in range(4)]] = np.log(10000)
+dxx[["logcumneg%d" % j for j in range(4)]] = np.log(100000)
+for j in range(4):
+
+    dxx["logcumpos%d" % j].iloc[100:] = np.log(20000)
+
+    y = r6.predict(exog=dxx)
+    y = y.values.copy()
+
+    if use_termplot:
+        fig = tpl.figure()
+        fig.plot(x, y[100:200] - y[0:100], xlabel="Days from first death",
+                 title="Coefficient for log week %d tests" % j)
+        fig.show()
+        print("")
+
+    plt.clf()
+    plt.grid(True)
+    plt.plot(x, y[100:200] - y[0:100], '-')
+    plt.xlabel("Days from first death")
+    plt.ylabel("Log ratio for log week %d tests" % j)
+    pdf.savefig()
+
+    dxx["logcumpos%d" % j].iloc[100:] = np.log(10000)
+
+# We use quasi-AIC (QAIC) instead of AIC for quasi-poisson GLMs.
+# Exclude the GEE model here.
+
+m = [m1, m3, m4, m5, m6]
+r = [r1, r3, r4, r5, r6]
+c = r5.scale
+for j in range(5):
+    qaic = -2 * m[j].loglike(r[j].params, scale=1) / c + 2 * m[j].df_resid
+    print("Model %d QAIC: %f" % (j+1, qaic))
 
 # ## Dispersion and the scale parameter
 
@@ -462,7 +561,7 @@ for (m, r) in (m1, r1), (m2, r2), (m3, r3), (m4, r4):
     s = huber_scale(r.resid_pearson, m1.exog.shape[1])
     scale_huber.append(s)
 
-print("\nRobust scale parameter estimates:")
+print("Robust scale parameter estimates:")
 for s in scale_huber:
     print("%f" % s)
 print("")
@@ -588,6 +687,13 @@ if use_termplot:
     fig.plot(ds.fit_mean, ds.robust_scale, xlabel="Conditional mean",
              title="Scale parameter")
     fig.show()
+
+plt.clf()
+plt.grid(True)
+plt.plot(ds["fit_mean"].values.copy(), ds["robust_scale"].values.copy(), '-')
+plt.xlabel("Conditional mean")
+plt.ylabel("Local scale parameter")
+pdf.savefig()
 
 # Fit the model with the variance structure suggested by the above
 # analysis
