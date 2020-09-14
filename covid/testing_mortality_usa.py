@@ -1,6 +1,6 @@
-# ## COVID testing and mortality data for the US states
+# COVID testing and mortality data for the US states
 
-# This notebook considers the relationship between COVID mortality and
+# Here we consider the relationship between COVID mortality and
 # testing results for SARS-CoV-2 coronavirus exposure/infection, using
 # data for the US obtained from the [COVID Tracking
 # project](covidtracking.com).
