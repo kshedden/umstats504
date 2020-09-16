@@ -30,7 +30,7 @@ pdf = PdfPages("mort_glm.pdf")
 pa = "/nfs/kshedden/cdc_mortality/final/pop_mort.csv"
 df = pd.read_csv(pa)
 
-# All of the GLM's we will be using here use the logarithm as their
+# All of the GLMs we will be using here use the logarithm as their
 # link function.  Therefore we will use log-transformed population as
 # an offset, so that mortality is expressed relative to the population
 # size.
@@ -62,7 +62,7 @@ df.loc[:, "offset"] = np.log(df.Population)
 # We begin by fitting an initial Poisson GLM treating all counts as
 # being independent.
 
-fml = "Deaths ~ 0 + Age_group + Sex + C(Year) + C(Month)"
+fml = "Deaths ~ Age_group + Sex + C(Year) + C(Month)"
 m1 = sm.GLM.from_formula(fml, family=sm.families.Poisson(), offset=df.offset, data=df)
 r1 = m1.fit(scale="X2")
 
@@ -138,12 +138,26 @@ pdf.savefig()
 # dependence of the mortality counts within each age band.
 
 m3 = sm.GEE.from_formula(fml, family=sm.families.Poisson(), groups="Age_group",
-          offset=df.offset, cov_struct=sm.cov_struct.Stationary(max_lag=1, grid=True),
+          offset=df.offset, cov_struct=sm.cov_struct.Stationary(max_lag=5, grid=True),
           data=df)
-r3 = m3.fit(maxiter=2,scale="X2")
+r3 = m3.fit(maxiter=10, first_dep_update=9, scale="X2")
 
 print("Stationary covariance structure for: %s\n" % fml)
 print(m3.cov_struct.summary())
+
+# Switch the True/False below to control which grouping
+# factor is used for the covariance structure.
+
+if True:
+    groups = "yearmonth"
+    ref = r2
+    cs = sm.cov_struct.Independence()
+    kwds = {}
+else:
+    groups = "Age_group"
+    ref = r3
+    cs = sm.cov_struct.Stationary(max_lag=4, grid=True)
+    kwds = {"maxiter": 10, "first_dep_update": 9}
 
 # Below we show how the standard errors compare when using the
 # stationary GEE estimates compared to when using the independence
@@ -179,20 +193,20 @@ pdf.savefig()
 # score test results indicate that there is strong evidence for this.
 
 fml4 = "Deaths ~ Age_group * Sex + C(Year) + C(Month)"
-m4 = sm.GEE.from_formula(fml4, family=sm.families.Poisson(), groups="yearmonth",
-          offset=df.offset, cov_struct=sm.cov_struct.Independence(), data=df)
-r4 = m4.fit(maxiter=2, scale="X2")
+m4 = sm.GEE.from_formula(fml4, family=sm.families.Poisson(), groups=groups,
+          offset=df.offset, cov_struct=cs, data=df)
+r4 = m4.fit(scale="X2", **kwds)
 
 print("\nCompare %s to\n        %s:" % (fml4, fml))
-print(m4.compare_score_test(r2))
+print(m4.compare_score_test(ref))
 
 # Next we assess whether the seasonality patterns vary by sex.  There
 # is strong evidence for this moderation as well.
 
 fml5 = "Deaths ~ (Age_group + C(Month)) * Sex + C(Year)"
-m5 = sm.GEE.from_formula(fml5, family=sm.families.Poisson(), groups="yearmonth",
-          offset=df.offset, cov_struct=sm.cov_struct.Independence(), data=df)
-r5 = m5.fit(scale="X2")
+m5 = sm.GEE.from_formula(fml5, family=sm.families.Poisson(), groups=groups,
+          offset=df.offset, cov_struct=cs, data=df)
+r5 = m5.fit(scale="X2", **kwds)
 
 print("\nCompare %s to\n        %s:" % (fml5, fml4))
 print(m5.compare_score_test(r4))
@@ -201,9 +215,9 @@ print(m5.compare_score_test(r4))
 # sex.
 
 fml6 = "Deaths ~ (Age_group + C(Year) + C(Month)) * Sex"
-m6 = sm.GEE.from_formula(fml6, family=sm.families.Poisson(), groups="yearmonth",
-          offset=df.offset, cov_struct=sm.cov_struct.Independence(), data=df)
-r6 = m6.fit(scale="X2")
+m6 = sm.GEE.from_formula(fml6, family=sm.families.Poisson(), groups=groups,
+          offset=df.offset, cov_struct=cs, data=df)
+r6 = m6.fit(scale="X2", **kwds)
 
 print("\nCompare %s to\n        %s:" % (fml6, fml5))
 print(m6.compare_score_test(r5))
@@ -212,9 +226,9 @@ print(m6.compare_score_test(r5))
 # year.  There isn't much evidence for this form of moderation.
 
 fml7 = "Deaths ~ (Age_group + C(Year) * C(Month)) * Sex"
-m7 = sm.GEE.from_formula(fml7, family=sm.families.Poisson(), groups="yearmonth",
-          offset=df.offset, cov_struct=sm.cov_struct.Independence(), data=df)
-r7 = m7.fit()
+m7 = sm.GEE.from_formula(fml7, family=sm.families.Poisson(), groups=groups,
+          offset=df.offset, cov_struct=cs, data=df)
+r7 = m7.fit(scale="X2", **kwds)
 
 print("\nCompare %s to\n        %s:" % (fml7, fml6))
 print(m7.compare_score_test(r6))
@@ -228,16 +242,19 @@ print("\n")
 # group effects by sex.  The values plotted on the vertical axis can
 # be differenced to obtain log risk ratios.  These results hold for
 # all months and all years.
-
+#
 # These are the ages that are plotted along the horizontal axis
+
 ages = ["%02d_%02d" % (a, a+4) for a in range(5, 90, 5)]
 an = [a+2.5 for a in range(0, 90, 5)]
 ages[-1] = "85_99"
 
 # These are the parameters that we will use to obtain log risk ratios.
+
 pa = r6.params.to_dict()
 
 # These are the contributions of age and sex to the model.
+
 xf = [0] + [pa['Age_group[T.%s]' % a] for a in ages]
 xm = [0] + [pa['Age_group[T.%s]:Sex[T.Male]' % a] for a in ages]
 xf = np.asarray(xf)
@@ -245,6 +262,7 @@ xm = np.asarray(xm)
 xm += pa['Sex[T.Male]']
 
 # Plot the age and sex effects
+
 plt.clf()
 plt.axes([0.1, 0.1, 0.7, 0.8])
 plt.grid(True)
@@ -318,6 +336,7 @@ pdf.savefig()
 # epidemic.
 
 # These are the contributions of age and sex to the model.
+
 years = range(2008, 2019)
 xf = [0] + [pa['C(Year)[T.%4d]' % y] for y in years]
 xm = [0] + [pa['C(Year)[T.%4d]:Sex[T.Male]' % y] for y in years]
@@ -370,12 +389,13 @@ r6.scale
 # conditional variance and conditional mean are approximately
 # proportional.
 
-qt = pd.qcut(r6.fittedvalues, 20)
+fv = np.exp(np.dot(m3.exog, r3.params) + m3.offset)
+qt = pd.qcut(fv, 10)
 qt.name = "group"
 qt = pd.DataFrame(qt)
-qt["resid"] = r6.resid_pearson / np.sqrt(r6.scale)
-qt["fittedvalues"] = r6.fittedvalues
-qa = qt.groupby("group").agg({"fittedvalues": np.mean, "resid": np.var})
+qt["resid"] = (m3.endog - fv) / np.sqrt(fv)
+qt["fittedvalues"] = fv
+qa = qt.groupby("group").agg({"fittedvalues": np.mean, "resid": lambda x: np.mean(x**2)})
 
 plt.clf()
 plt.grid(True)

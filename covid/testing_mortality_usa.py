@@ -299,7 +299,12 @@ fml = "ddeath ~ C(weekday) + lpop + "
 fml += " + ".join(["logcumpos%d" % j for j in range(4)])
 fml += " + "
 fml += " + ".join(["logcumneg%d" % j for j in range(4)])
-m2 = sm.GEE.from_formula(fml, data=dx, groups="state", family=sm.families.Poisson())
+
+try:
+    cs = sm.cov_struct.Autoregressive(grid=True)
+except TypeError:
+    cs = sm.cov_struct.Stationary(max_lag=1)
+m2 = sm.GEE.from_formula(fml, data=dx, cov_struct=cs, groups="state", family=sm.families.Poisson())
 r2 = m2.fit(scale="X2")
 print(r2.summary())
 
@@ -731,5 +736,10 @@ assert(not np.allclose(r1x.bse, r1t.bse)) # standard errors
 r1x = m1.fit(cov_type="HC0")
 r3x = m3.fit(cov_type="HC0")
 r4x = m4.fit(cov_type="HC0")
+
+# Look at the first-lag autocorrelation within states.
+
+dr = pd.DataFrame({"st": r1x.model.data.frame.state, "resid": r1x.resid_pearson})
+ac = dr.groupby("st")["resid"].apply(lambda x: np.corrcoef(x[1:], x[0:-1])[0,1])
 
 pdf.close()
