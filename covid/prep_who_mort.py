@@ -2,7 +2,10 @@
 #
 # https://www.who.int/healthinfo/statistics/mortality_rawdata/en/
 #
-# There are two files, called Morticd10_part1 and Morticd10_part2.
+# There are two mortality files to download, called Morticd10_part1 and
+# Morticd10_part2.
+#
+# You also need to download the "Population and live births" file.
 #
 # Place these files in the current working directory, compress
 # them with gzip, and run this script.
