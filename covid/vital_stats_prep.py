@@ -237,3 +237,5 @@ def run():
     aggregate()
     prep_population()
     final_merge()
+
+run()
