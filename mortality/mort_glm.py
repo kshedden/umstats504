@@ -37,6 +37,17 @@ df = pd.read_csv(pa)
 
 df.loc[:, "offset"] = np.log(df.Population)
 
+# Create two grouping variables for GEE, discussed further below.
+df["yearmonth"] = 20*df.Year + df.Month
+df["Age_group_sex"] = ["%s_%s" % (x, y) for x, y in zip(df["Age_group"], df["Sex"])]
+
+# When fitting timeseries correlation models with GEE, we need to
+# make sure that the values are sorted with respect to time (or
+# we can specify an explicit time variable but we do not do that
+# here).
+df_as = df.sort_values(by="Age_group_sex")
+df_ym = df.sort_values(by="yearmonth")
+
 # A very important property that follows from using a model with the
 # log link function is that the regression effects are multiplicative.
 # In our setting, this means that the overall mortality is represented
@@ -63,7 +74,8 @@ df.loc[:, "offset"] = np.log(df.Population)
 # being independent.
 
 fml = "Deaths ~ Age_group + Sex + C(Year) + C(Month)"
-m1 = sm.GLM.from_formula(fml, family=sm.families.Poisson(), offset=df.offset, data=df)
+m1 = sm.GLM.from_formula(fml, family=sm.families.Poisson(),
+             offset=df.offset, data=df)
 r1 = m1.fit(scale="X2")
 
 # To see the parameter estimates, you can type `r1.summary()`.
@@ -97,9 +109,8 @@ r1 = m1.fit(scale="X2")
 # above, we can obtain meaningful results from a working independence
 # model even though we suspect that the data are dependent.
 
-df["yearmonth"] = 20*df.Year + df.Month
 m2 = sm.GEE.from_formula(fml, family=sm.families.Poisson(), groups="yearmonth",
-          offset=df.offset, cov_struct=sm.cov_struct.Independence(), data=df)
+          offset="offset", cov_struct=sm.cov_struct.Independence(), data=df_ym)
 r2 = m2.fit(scale="X2")
 
 # The plot below shows how each parameter estimate compares when
@@ -133,44 +144,54 @@ pdf.savefig()
 # several forms.  One possibility, explored above, is that values
 # observed in the same calendar month are correlated between demographic bands.  Another
 # possibility is that there is temporal correlation within each age
-# band.  It is difficult to account for both forms fo correlation at the same
-# time.  Below we use a stationary covariance model to capture serial
-# dependence of the mortality counts within each age band.
+# band.
 
-m3 = sm.GEE.from_formula(fml, family=sm.families.Poisson(), groups="Age_group",
-          offset=df.offset, cov_struct=sm.cov_struct.Stationary(max_lag=5, grid=True),
-          data=df)
-r3 = m3.fit(maxiter=10, first_dep_update=9, scale="X2")
+m3 = sm.GEE.from_formula(fml, family=sm.families.Poisson(),
+          groups="Age_group_sex",
+          offset="offset",
+          data=df_as)
+r3 = m3.fit(maxiter=20, first_dep_update=19, scale="X2")
+
+# Below we show how the standard errors compare when using the
+# GEE estimates clustering on age group/sex compared to using
+# GEE estimates clistering on year/month.
+
+plt.clf()
+plt.grid(True)
+plt.plot(r2.bse.values, r3.bse.values, 'o')
+ma = max(r2.bse.max(), r3.bse.max())
+plt.plot([0, ma], [0, ma], '-', color='purple')
+plt.xlabel("Standard error clustering on year/month")
+_ = plt.ylabel("Standard error clustering on age/sex")
+pdf.savefig()
+
+# If we want to actually estimate the covariance structure,
+# we can use one of the working covariance models.  Here we
+# use the stationay model.
+
+m4 = sm.GEE.from_formula(fml, family=sm.families.Poisson(),
+          groups="Age_group_sex",
+          offset="offset",
+          cov_struct=sm.cov_struct.Stationary(max_lag=5, grid=True),
+          data=df_as)
+r4 = m4.fit(maxiter=20, first_dep_update=19, scale="X2")
 
 print("Stationary covariance structure for: %s\n" % fml)
-print(m3.cov_struct.summary())
+print(m4.cov_struct.summary())
 
 # Switch the True/False below to control which grouping
 # factor is used for the covariance structure.
 
-if True:
+if False:
     groups = "yearmonth"
     ref = r2
     cs = sm.cov_struct.Independence()
-    kwds = {}
+    df = df_ym
 else:
-    groups = "Age_group"
+    groups = "Age_group_sex"
     ref = r3
-    cs = sm.cov_struct.Stationary(max_lag=4, grid=True)
-    kwds = {"maxiter": 10, "first_dep_update": 9}
-
-# Below we show how the standard errors compare when using the
-# stationary GEE estimates compared to when using the independence
-# working correlation structure.
-
-plt.clf()
-plt.grid(True)
-plt.plot(r1.bse.values, r3.bse.values, 'o')
-ma = max(r1.bse.max(), r3.bse.max())
-plt.plot([0, ma], [0, ma], '-', color='purple')
-plt.xlabel("GLM standard error")
-_ = plt.ylabel("GEE age-clustered standard error")
-pdf.savefig()
+    cs = sm.cov_struct.Independence()
+    df = df_as
 
 # A further complication is that the covariance structure depends on
 # the mean structure, and vice versa.  Here, we are comparing two
@@ -192,46 +213,46 @@ pdf.savefig()
 # considering whether age-specific mortality rates vary by sex.  The
 # score test results indicate that there is strong evidence for this.
 
-fml4 = "Deaths ~ Age_group * Sex + C(Year) + C(Month)"
-m4 = sm.GEE.from_formula(fml4, family=sm.families.Poisson(), groups=groups,
-          offset=df.offset, cov_struct=cs, data=df)
-r4 = m4.fit(scale="X2", **kwds)
+fml5 = "Deaths ~ Age_group * Sex + C(Year) + C(Month)"
+m5 = sm.GEE.from_formula(fml5, family=sm.families.Poisson(), groups=groups,
+          offset="offset", cov_struct=cs, data=df)
+r5 = m5.fit(scale="X2")
 
-print("\nCompare %s to\n        %s:" % (fml4, fml))
-print(m4.compare_score_test(ref))
+print("\nCompare %s to\n        %s:" % (fml5, fml))
+print(m5.compare_score_test(ref))
 
 # Next we assess whether the seasonality patterns vary by sex.  There
 # is strong evidence for this moderation as well.
 
-fml5 = "Deaths ~ (Age_group + C(Month)) * Sex + C(Year)"
-m5 = sm.GEE.from_formula(fml5, family=sm.families.Poisson(), groups=groups,
-          offset=df.offset, cov_struct=cs, data=df)
-r5 = m5.fit(scale="X2", **kwds)
-
-print("\nCompare %s to\n        %s:" % (fml5, fml4))
-print(m5.compare_score_test(r4))
-
-# There is also strong evidence that the long term trend varies by
-# sex.
-
-fml6 = "Deaths ~ (Age_group + C(Year) + C(Month)) * Sex"
+fml6 = "Deaths ~ (Age_group + C(Month)) * Sex + C(Year)"
 m6 = sm.GEE.from_formula(fml6, family=sm.families.Poisson(), groups=groups,
-          offset=df.offset, cov_struct=cs, data=df)
-r6 = m6.fit(scale="X2", **kwds)
+          offset="offset", cov_struct=cs, data=df)
+r6 = m6.fit(scale="X2")
 
 print("\nCompare %s to\n        %s:" % (fml6, fml5))
 print(m6.compare_score_test(r5))
 
-# Below we check whether the sex-specific seasonality patterns vary by
-# year.  There isn't much evidence for this form of moderation.
+# There is also strong evidence that the long term trend varies by
+# sex.
 
-fml7 = "Deaths ~ (Age_group + C(Year) * C(Month)) * Sex"
+fml7 = "Deaths ~ (Age_group + C(Year) + C(Month)) * Sex"
 m7 = sm.GEE.from_formula(fml7, family=sm.families.Poisson(), groups=groups,
-          offset=df.offset, cov_struct=cs, data=df)
-r7 = m7.fit(scale="X2", **kwds)
+          offset="offset", cov_struct=cs, data=df)
+r7 = m7.fit(scale="X2")
 
 print("\nCompare %s to\n        %s:" % (fml7, fml6))
 print(m7.compare_score_test(r6))
+
+# Below we check whether the sex-specific seasonality patterns vary by
+# year.  There isn't much evidence for this form of moderation.
+
+fml8 = "Deaths ~ (Age_group + C(Year) * C(Month)) * Sex"
+m8 = sm.GEE.from_formula(fml8, family=sm.families.Poisson(), groups=groups,
+          offset="offset", cov_struct=cs, data=df)
+r8 = m8.fit(scale="X2")
+
+print("\nCompare %s to\n        %s:" % (fml8, fml7))
+print(m8.compare_score_test(r7))
 print("\n")
 
 # Visualization of model structures
@@ -251,7 +272,7 @@ ages[-1] = "85_99"
 
 # These are the parameters that we will use to obtain log risk ratios.
 
-pa = r6.params.to_dict()
+pa = r7.params.to_dict()
 
 # These are the contributions of age and sex to the model.
 
