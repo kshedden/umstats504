@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 pdf = PdfPages("ssa_spectrum.pdf")
 
-for tau in False,:
+for tau in False, True:
 
     if tau:
         eiv = pd.read_csv("ssa_eig_tau.csv.gz")
@@ -28,6 +28,10 @@ for tau in False,:
     plt.plot(lk, np.log10(y), color='purple')
     plt.xlabel(r"$\log\, k$", size=16)
     plt.ylabel(r"$\log\, \lambda_k$", size=16)
+    if tau:
+        plt.title("tau autocorrelation")
+    else:
+        plt.title("Standard autocorrelation")
     pdf.savefig()
 
 pdf.close()
