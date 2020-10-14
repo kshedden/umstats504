@@ -47,6 +47,7 @@ for vn in ["Traffic", "Sources", "UDP", "TCP"]:
 
     # Difference up to order 3
     for k in range(4):
+
         y = np.diff(z, k)
         y = y.astype(np.float64) / 1000
 
@@ -68,6 +69,7 @@ for vn in ["Traffic", "Sources", "UDP", "TCP"]:
             plt.plot(a)
             plt.xlabel("Lag", size=15)
             plt.ylabel(("Autocovariance (%d-diff)" % k) + (" de-meaned" if demean else ""), size=15)
+            plt.title(cname[vn])
             pdf.savefig()
 
         # Plot the tau-autocorrelation
@@ -77,7 +79,8 @@ for vn in ["Traffic", "Sources", "UDP", "TCP"]:
         plt.grid(True)
         plt.plot(a)
         plt.xlabel("Lag", size=15)
-        plt.ylabel(("Tau autocorrelation (%d-diff)" % k) + (" de-meaned" if demean else ""), size=15)
+        plt.ylabel("Tau autocorrelation (%d-diff)" % k, size=15)
+        plt.title(cname[vn])
         pdf.savefig()
 
         # Plot the quantile function
@@ -202,8 +205,8 @@ for k, vn in enumerate(["Traffic", "Sources", "UDP", "TCP"]):
     plt.grid(True)
     plt.plot(h)
     plt.xlabel("Span", size=15)
-    plt.ylabel("Hill coefficient", size=15)
-    plt.title(vn + " 1-diff")
+    plt.ylabel("Hill estimate", size=15)
+    plt.title(cname[vn] + " 1-diff")
     pdf.savefig()
 
 # Hill estimators for simulated data
@@ -232,43 +235,6 @@ for k in range(3):
     plt.xlabel("Span", size=15)
     plt.ylabel("Hill coefficient", size=15)
     pdf.savefig()
-
-# Calculate the Hurst index using means and variances.
-def hurst(x):
-    z = []
-    # m is the block size
-    for m in 15, 30, 60:
-        y = np.reshape(x, (-1, m))
-        v = y.mean(1).var()
-        z.append([m, v])
-    z = np.log(np.asarray(z))
-    c = np.cov(z.T)
-    b = c[0, 1] / c[0, 0]
-    return b/2 + 1
-
-# Calculate the Hurst index using absolute values.
-def hurstabs(x):
-    z = []
-    # m is the block size
-    for m in 15, 30, 60:
-        y = np.reshape(x, (-1, m))
-        v = np.mean(np.abs(y.mean(1)))
-        z.append([m, v])
-    z = np.log(np.asarray(z))
-    c = np.cov(z.T)
-    b = c[0, 1] / c[0, 0]
-    return b + 1
-
-# Calculate the Hurst index two ways, for all four data series.
-print("Hurst parameters:")
-for j, x in enumerate([df.Traffic, df.Sources, df.UDP, df.TCP]):
-    print(df.columns[2+j])
-    for diffo in range(3):
-        x = np.asarray(x, dtype=np.float64)
-        z = np.diff(x, diffo)
-        z = z[0:60*(len(z)//60)]
-        z -= z.mean()
-        print("    %4d %7.3f %7.3f" % (diffo, hurst(z), hurstabs(z)))
 
 # Use regularized regression to study the autoregressive structure of the
 # traffic and unique sources series.
