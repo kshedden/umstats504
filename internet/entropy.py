@@ -1,33 +1,56 @@
 """
-Calculate the entropy of network traffic over all ports, by minute.
+Calculate the entropy of network traffic over all ports, by minute,
+for one day.
 
-All files in the 'results' directory named TTT.dports.csv.gz are processed,
-where TTT is a time index. These files should have 65536 columns, corresponding
-to the possible port numbers.
+The port usage files have 60 rows and 65536 columns, with the rows
+corresponding to minutes and the columns corresponding to port
+numbers.  Each file corresponds to one hour of data.
 
-Each row of an input file is a one-minute time block.
+There are 24 port-usage files per day, all these files are placed into
+one tar archive.
+
+The time values have Unix epoch format.  To get the human-readable
+time, you can use:
+
+import datetime
+datetime.datetime.fromtimestamp(1335394800)
 
 Zeros are dropped prior to computing the entropy.
 
-The output file is always named entropy_minute.csv, and consists of one entropy
-value per minute of traffic data.
+The output file is always named entropy_minute.csv, and consists of
+one entropy value per minute of traffic data.
 """
+
+# Process data for this date
+dt = "2012-04-25"
 
 import numpy as np
 import os
 import pandas as pd
+import tarfile
+import gzip
+import io
 
-# Process data for this date
-dt = "2012-04-25"
-base = os.path.join("results", dt)
+# The tar archive file name
+tfn = os.path.join("results", dt, "ports.tar")
 
-dport_files = os.listdir(base)
-dport_files = [x for x in dport_files if x.endswith(".dports.csv.gz")]
+# The tar archive
+tf = tarfile.open(tfn)
 
-# Make sure the files are in temporal order
-d = [int(x.split(".")[0]) for x in dport_files]
-ii = np.argsort(d)
-dport_files = [dport_files[i] for i in ii]
+# Read all the port usage files for one day
+df = {}
+for m in tf.getnames():
+    b = tf.extractfile(m).read()
+    c = gzip.decompress(b)
+    c = c.decode()
+    x = np.genfromtxt(io.StringIO(c), delimiter=",")
+    n = os.path.split(m)[-1].split(".")[0]
+    df[n] = x
+    print(n)
+
+# Get the time values in order
+times = list(df.keys())
+times.sort()
 
 # Caclulate the entropy, dropping 0's.
 def entropy(x):
@@ -38,16 +61,10 @@ def entropy(x):
 
 # There should be one file per hour.
 all_ent = []
-for f in dport_files:
-
-    pa = os.path.join("results/" + dt, f)
-    mat = np.genfromtxt(pa, delimiter=",")
+for ti in times:
 
     # Loop over minutes within the hour
+    mat = df[ti]
     for k in range(60):
         all_ent.append(entropy(mat[k, :]))
 
-fid = open(os.path.join(base, "entropy_minute.csv"), "w")
-for x in all_ent:
-    fid.write("%f\n" % x)
-fid.close()
