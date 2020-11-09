@@ -33,6 +33,10 @@ gee_result1 = gee_model1.fit()
 print(gee_model.compare_score_test(gee_result0))
 print(gee_model.compare_score_test(gee_result1))
 
+# Consider the correlation by PSU.
+gee_model2 = sm.GEE.from_formula(fml, groups="psu", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
+gee_result2 = gee_model2.fit()
+
 # Plot mean curves of log income by age for women and for men,
 # each with a confidence band.
 def conf_band(result, status, educ, title):
