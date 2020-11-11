@@ -9,33 +9,39 @@ from matplotlib.backends.backend_pdf import PdfPages
 pdf = PdfPages("rlms_gee_plots.pdf")
 
 # Mean structure, with and without sex effects
-fml = "I(np.log2(J10)) ~ C(status) + (bs(year, 5) + bs(age, 5) + bs(educ, 5))*Female + C(OCCUP08) + I(np.log2(J8))"
 fml0 = "I(np.log2(J10)) ~ C(status) + bs(year, 5) + bs(age, 5) + bs(educ, 5) + C(OCCUP08) + I(np.log2(J8))"
 fml1 = "I(np.log2(J10)) ~ C(status) + bs(year, 5) + bs(age, 5)*Female + bs(educ, 5) + C(OCCUP08) + I(np.log2(J8))"
+fml2 = "I(np.log2(J10)) ~ C(status) + (bs(year, 5) + bs(age, 5) + bs(educ, 5))*Female + C(OCCUP08) + I(np.log2(J8))"
+fml3 = "I(np.log2(J10)) ~ (C(status) + bs(year, 5) + bs(age, 5) + bs(educ, 5))*Female + C(OCCUP08) + I(np.log2(J8))"
 
 # OLS model with/without sex effects
-ols_model = sm.OLS.from_formula(fml, data=dx)
-ols_result = ols_model.fit()
 ols_model0 = sm.OLS.from_formula(fml0, data=dx)
 ols_result0 = ols_model0.fit()
 ols_model1 = sm.OLS.from_formula(fml1, data=dx)
 ols_result1 = ols_model1.fit()
+ols_model2 = sm.OLS.from_formula(fml2, data=dx)
+ols_result2 = ols_model2.fit()
+ols_model3 = sm.OLS.from_formula(fml3, data=dx)
+ols_result3 = ols_model3.fit()
 
 # GEE model with/without sex effects
-gee_model = sm.GEE.from_formula(fml, groups="idind", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
-gee_result = gee_model.fit()
 gee_model0 = sm.GEE.from_formula(fml0, groups="idind", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
 gee_result0 = gee_model0.fit()
 gee_model1 = sm.GEE.from_formula(fml1, groups="idind", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
 gee_result1 = gee_model1.fit()
+gee_model2 = sm.GEE.from_formula(fml2, groups="idind", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
+gee_result2 = gee_model2.fit()
+gee_model3 = sm.GEE.from_formula(fml3, groups="idind", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
+gee_result3 = gee_model3.fit()
 
 # Compare the two models using score tests (full sex effects, limited sex effects)
-print(gee_model.compare_score_test(gee_result0))
-print(gee_model.compare_score_test(gee_result1))
+print(gee_model1.compare_score_test(gee_result0))
+print(gee_model2.compare_score_test(gee_result1))
+print(gee_model3.compare_score_test(gee_result2))
 
 # Consider the correlation by PSU.
-gee_model2 = sm.GEE.from_formula(fml, groups="psu", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
-gee_result2 = gee_model2.fit()
+gee_model3x = sm.GEE.from_formula(fml3, groups="psu", cov_struct=sm.cov_struct.Exchangeable(), data=dx)
+gee_result3x = gee_model3x.fit()
 
 # Plot mean curves of log income by age for women and for men,
 # each with a confidence band.
@@ -85,11 +91,8 @@ def conf_band(result, status, educ, title):
 # men over a range of ages, controlling for specific levels of
 # status (region type), and educ (educational level).
 for status in 1, 2, 3, 4:
-    for educ in 7, 14, 18, 21:
-        conf_band(ols_result, status=status, educ=educ, title="OLS")
-        conf_band(gee_result, status=status, educ=educ, title="GEE")
+    for educ in 16, 18, 21:
+        conf_band(ols_result3, status=status, educ=educ, title="OLS")
+        conf_band(gee_result3, status=status, educ=educ, title="GEE")
 
 pdf.close()
-
-import os
-os.system("cp rlms_gee_plots.pdf ~kshedden")
